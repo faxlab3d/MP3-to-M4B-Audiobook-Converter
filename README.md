@@ -30,7 +30,7 @@ The clean, intuitive interface makes conversion simple:
 ## 📋 Requirements
 
 ### System Requirements
-- **Python 3.6+**
+- **Python 3.6+** - [Download from python.org](https://www.python.org/downloads/)
 - **FFmpeg** (must be installed and accessible from command line)
 
 ### Python Dependencies
