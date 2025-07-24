@@ -260,57 +260,64 @@ class AudiobookConverterGUI:
         self.root.after(100, self.check_conversion_progress)
     
     def convert_files(self):
-        """Convert MP3 files to M4B (runs in separate thread)."""
+        """Convert MP3 files to M4B using filter_complex concat (no skipping)."""
         try:
             mp3_files = self.get_mp3_files()
             output_file = self.output_file.get()
             title = self.book_title.get() or "Audiobook"
             author = self.author_name.get() or "Unknown"
             bitrate = self.bitrate.get()
-            
-            # Update status
+
             self.progress_queue.put(("status", f"Converting {len(mp3_files)} files..."))
-            
-            # Create temporary directory for processing
+
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Create chapters
+                # Create chapter metadata
                 self.progress_queue.put(("status", "Creating chapter metadata..."))
                 chapters = self.create_chapter_metadata(mp3_files)
                 metadata_file = self.create_metadata_file(chapters, title, author, temp_dir)
-                
-                # Create file list
-                file_list = os.path.join(temp_dir, 'files.txt')
-                with open(file_list, 'w', encoding='utf-8') as f:
-                    for mp3_file in mp3_files:
-                        escaped_path = mp3_file.replace("'", "'\\''").replace("\\", "\\\\")
-                        f.write(f"file '{escaped_path}'\n")
-                
-                # Build FFmpeg command with proper audio processing
+
+                # Build ffmpeg input arguments
+                input_args = []
+                filter_inputs = []
+                for idx, mp3_file in enumerate(mp3_files):
+                    input_args += ['-i', mp3_file]
+                    filter_inputs.append(f"[{idx}:a:0]")
+
+                # Combine inputs into filtergraph
+                filtergraph = ''.join(filter_inputs) + f"concat=n={len(mp3_files)}:v=0:a=1[outa]"
+
+                # Final command
                 cmd = [
-                    'ffmpeg', '-f', 'concat', '-safe', '0', '-i', file_list,
-                    '-i', metadata_file, '-map_metadata', '1',
-                    '-vn',           # Disable video completely
-                    '-map', '0:a',   # Only map audio streams
-                    '-c:a', 'aac', '-b:a', bitrate,
-                    '-ar', '44100',  # Force consistent sample rate
-                    '-ac', '2',      # Force stereo (or mono if needed)
-                    '-avoid_negative_ts', 'make_zero',  # Fix timing issues
-                    '-fflags', '+genpts',  # Generate presentation timestamps
-                    '-movflags', '+faststart', '-f', 'mp4', '-y', output_file
+                    'ffmpeg',
+                    *input_args,                  # All -i inputs go first
+                    '-i', metadata_file,          # metadata input LAST
+                    '-filter_complex', filtergraph,
+                    '-map', '[outa]',
+                    '-map_metadata', f'{len(mp3_files)}',  # metadata is input #N (last)
+                    '-vn',
+                    '-c:a', 'aac',
+                    '-b:a', bitrate,
+                    '-ar', '44100',
+                    '-ac', '2',
+                    '-fflags', '+genpts',
+                    '-movflags', '+faststart',
+                    '-f', 'mp4',
+                    '-y', output_file
                 ]
-                
+
                 self.progress_queue.put(("status", "Converting audio... Please wait."))
-                
-                # Run conversion
+
                 result = subprocess.run(cmd, capture_output=True, text=True)
-                
+
                 if result.returncode == 0:
                     self.progress_queue.put(("success", f"Conversion completed!\nSaved: {output_file}"))
                 else:
                     self.progress_queue.put(("error", f"Conversion failed:\n{result.stderr}"))
-                    
+
         except Exception as e:
             self.progress_queue.put(("error", f"Error during conversion:\n{str(e)}"))
+
+
     
     def create_chapter_metadata(self, mp3_files):
         """Create chapter metadata for the audiobook."""
