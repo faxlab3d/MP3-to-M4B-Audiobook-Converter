@@ -1,5 +1,7 @@
 # MP3 to M4B Audiobook Converter
 
+<img width="727" height="625" alt="image" src="https://github.com/user-attachments/assets/2eb3b840-abb9-41e9-b0da-3bd687c3a26c" />
+
 A user-friendly GUI application that converts multiple MP3 files into a single M4B audiobook file, perfect for iPhone and other audiobook players.
 
 ![Python](https://img.shields.io/badge/python-3.6+-blue.svg)
